@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { getCartItems, clearCart } from "@/lib/cart-wishlist"
+import { getCartItems, clearCart } from "@/app/actions/cart"
 import type { Item } from "@/components/item-card"
 import { CheckCircle2, User, Mail, Phone, MessageSquare } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { saveContactRequest, getCurrentUserId } from "@/lib/requests"
+import { getUserProfile } from "@/app/actions/profile"
 
 export default function CheckoutPage() {
   const [cartItems, setCartItems] = useState<Item[]>([])
@@ -26,25 +27,48 @@ export default function CheckoutPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const items = getCartItems()
-    if (items.length === 0) {
-      router.push("/cart")
-    }
-    setCartItems(items)
+    const loadData = async () => {
+      const data = await getCartItems()
 
-    // Load user data from localStorage
-    const userData = localStorage.getItem("campusxchange_user")
-    if (userData) {
-      const user = JSON.parse(userData)
-      setFormData((prev) => ({
-        ...prev,
-        name: user.name || "",
-        email: user.email || "",
-      }))
+      // Normalize cart items
+      const normalized: Item[] = data.map((entry: any) => {
+        const itemData = entry.items
+        return {
+          ...itemData,
+          id: itemData.id,
+          seller_id: itemData.seller_id,
+          image: itemData.image_url || itemData.image || "/placeholder.svg",
+          seller: {
+            id: itemData.seller_id,
+            name: itemData.profiles?.name || "Unknown Seller",
+            year: itemData.profiles?.year || "Unknown",
+            department: itemData.profiles?.department || "Unknown",
+          },
+        }
+      })
+
+      if (normalized.length === 0) {
+        router.push("/cart")
+        return
+      }
+
+      setCartItems(normalized)
+
+      // Load user profile data
+      const profile = await getUserProfile()
+      if (profile) {
+        setFormData((prev) => ({
+          ...prev,
+          name: profile.name || "",
+          email: profile.email || "",
+        }))
+      }
     }
+
+    loadData()
   }, [router])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim()) {
@@ -66,8 +90,8 @@ export default function CheckoutPage() {
         itemTitle: item.title,
         itemPrice: item.price,
         itemImage: item.image,
-        sellerId: item.seller.id || "seller-1",
-        sellerName: item.seller.name || "Unknown Seller",
+        sellerId: item.seller?.id || item.seller_id || "seller-1",
+        sellerName: item.seller?.name || "Unknown Seller",
         buyerId: userId,
         buyerName: formData.name,
         buyerEmail: formData.email,
@@ -76,22 +100,22 @@ export default function CheckoutPage() {
       })
     })
 
-    // Clear cart after submission
-    setTimeout(() => {
-      clearCart()
+    // Clear cart after submission using Supabase
+    setTimeout(async () => {
+      await clearCart()
       window.dispatchEvent(new Event("cartUpdated"))
     }, 2000)
   }
 
   const totalPrice = cartItems.reduce((sum, item) => sum + (item.price || 0), 0)
 
-  // Get unique sellers
-  const sellers = Array.from(new Set(cartItems.map((item) => item.seller.name)))
+  // Get unique sellers by seller_id
+  const sellers = Array.from(new Set(cartItems.map((item) => item.seller_id)))
 
   if (submitted) {
     return (
       <div className="min-h-screen bg-background">
-        <Navigation isVerified={true} />
+        <Navigation />
 
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-2xl mx-auto text-center">
@@ -124,7 +148,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation isVerified={true} />
+      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
@@ -224,7 +248,9 @@ export default function CheckoutPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm text-foreground line-clamp-1">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">{item.seller.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.seller?.department || "Unknown"} • {item.seller?.year || "Student"}
+                        </p>
                         <p className="text-sm font-bold text-primary">₹{item.price}</p>
                       </div>
                     </div>

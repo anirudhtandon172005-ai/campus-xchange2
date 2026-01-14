@@ -1,191 +1,210 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Navigation } from "@/components/navigation"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, CheckCircle2, Zap } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
+import { createItem } from "@/app/actions/items"
+import { Loader2, Package, DollarSign, Image as ImageIcon } from "lucide-react"
 
 export default function SellPage() {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSubmitted, setIsSubmitted] = useState(false)
-  const [listingType, setListingType] = useState("sell")
-  const [isNegotiable, setIsNegotiable] = useState(false)
-  const [isUrgent, setIsUrgent] = useState(false)
   const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
-    // Simulate submission
-    setTimeout(() => {
-      setIsSubmitting(false)
-      setIsSubmitted(true)
-      setTimeout(() => {
+    setError("")
+
+    const formData = new FormData(e.currentTarget)
+
+    try {
+      const result = await createItem(formData)
+
+      if (result.success) {
         router.push("/browse")
-      }, 2000)
-    }, 1500)
+      } else {
+        setError(result.error || "Failed to create item")
+      }
+    } catch (err) {
+      setError("An error occurred while creating the item")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background">
         <Navigation />
+
         <div className="container mx-auto px-4 py-12">
-          <div className="mx-auto max-w-2xl">
-            {isSubmitted ? (
-              <Card className="p-12 text-center space-y-6">
-                <div className="flex justify-center">
-                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-accent/10">
-                    <CheckCircle2 className="h-12 w-12 text-accent" />
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-foreground mb-2">Sell Your Item</h1>
+              <p className="text-muted-foreground">List your item for sale, lending, or recycling</p>
+            </div>
+
+            <Card className="p-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <div className="p-4 bg-destructive/10 border border-destructive rounded-lg">
+                    <p className="text-sm text-destructive">{error}</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Item Title *
+                  </Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    placeholder="e.g., Calculus Textbook 9th Edition"
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description *</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    placeholder="Describe your item in detail..."
+                    required
+                    disabled={isSubmitting}
+                    rows={4}
+                  />
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Category *</Label>
+                    <select
+                      id="category"
+                      name="category"
+                      required
+                      disabled={isSubmitting}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select category</option>
+                      <option value="books">Books</option>
+                      <option value="electronics">Electronics</option>
+                      <option value="furniture">Furniture</option>
+                      <option value="clothing">Clothing</option>
+                      <option value="sports">Sports Equipment</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Listing Type *</Label>
+                    <select
+                      id="type"
+                      name="type"
+                      required
+                      disabled={isSubmitting}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select type</option>
+                      <option value="sell">Sell</option>
+                      <option value="borrow">Lend/Borrow</option>
+                      <option value="recycle">Recycle (Free)</option>
+                    </select>
                   </div>
                 </div>
-                <div>
-                  <h2 className="text-3xl font-bold text-foreground mb-3">Item Listed Successfully!</h2>
-                  <p className="text-lg text-muted-foreground">
-                    Your item is now visible to students. Redirecting you...
-                  </p>
+
+                <div className="space-y-2">
+                  <Label htmlFor="price" className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Price (₹) <span className="text-xs text-muted-foreground">(leave empty for borrow/recycle)</span>
+                  </Label>
+                  <Input
+                    id="price"
+                    name="price"
+                    type="number"
+                    placeholder="0"
+                    min="0"
+                    step="1"
+                    disabled={isSubmitting}
+                  />
                 </div>
-              </Card>
-            ) : (
-              <>
-                <div className="mb-8">
-                  <h1 className="text-3xl font-bold text-foreground mb-2">List an Item</h1>
-                  <p className="text-muted-foreground">Share what you have with your campus community</p>
+
+                <div className="space-y-2">
+                  <Label htmlFor="image_url" className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    Image URL *
+                  </Label>
+                  <Input
+                    id="image_url"
+                    name="image_url"
+                    type="url"
+                    placeholder="https://example.com/image.jpg"
+                    required
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-muted-foreground">Provide a direct link to your item's image</p>
                 </div>
 
-                <Card className="p-6">
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="title">Item Title *</Label>
-                      <Input id="title" placeholder="e.g., Calculus Textbook - 9th Edition" required />
-                    </div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="is_negotiable"
+                      name="is_negotiable"
+                      disabled={isSubmitting}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor="is_negotiable" className="cursor-pointer">
+                      Price is negotiable
+                    </Label>
+                  </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="category">Category *</Label>
-                        <Select required>
-                          <SelectTrigger id="category">
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="books">Books</SelectItem>
-                            <SelectItem value="electronics">Electronics</SelectItem>
-                            <SelectItem value="furniture">Furniture</SelectItem>
-                            <SelectItem value="clothing">Clothing</SelectItem>
-                            <SelectItem value="misc">Miscellaneous</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="is_urgent"
+                      name="is_urgent"
+                      disabled={isSubmitting}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor="is_urgent" className="cursor-pointer">
+                      Urgent sale (needs to sell quickly)
+                    </Label>
+                  </div>
+                </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="type">Listing Type *</Label>
-                        <Select value={listingType} onValueChange={setListingType} required>
-                          <SelectTrigger id="type">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="sell">Sell</SelectItem>
-                            <SelectItem value="borrow">Borrow</SelectItem>
-                            <SelectItem value="recycle">Recycle (Free)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {listingType === "sell" && (
-                      <div className="space-y-3">
-                        <div className="space-y-2">
-                          <Label htmlFor="price">Price (INR) *</Label>
-                          <Input id="price" type="number" placeholder="0.00" min="0" step="0.01" required />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id="negotiable"
-                            checked={isNegotiable}
-                            onChange={(e) => setIsNegotiable(e.target.checked)}
-                            className="h-4 w-4 rounded border-border"
-                          />
-                          <Label htmlFor="negotiable" className="font-normal cursor-pointer">
-                            Price is negotiable
-                          </Label>
-                        </div>
-                      </div>
+                <div className="flex gap-3 pt-4">
+                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Listing Item...
+                      </>
+                    ) : (
+                      "List Item"
                     )}
-
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description *</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Describe the item's condition, features, and any other relevant details..."
-                        rows={4}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Upload Photos *</Label>
-                      <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg p-8 hover:border-primary/50 transition-colors cursor-pointer">
-                        <Upload className="h-12 w-12 text-muted-foreground mb-3" />
-                        <p className="text-sm font-medium text-foreground mb-1">Click to upload or drag and drop</p>
-                        <p className="text-xs text-muted-foreground">PNG, JPG up to 10MB (max 5 photos)</p>
-                      </div>
-                    </div>
-
-                    <Card className="border-urgent/50 bg-urgent/5 p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-urgent shrink-0">
-                          <Zap className="h-5 w-5 text-urgent-foreground" />
-                        </div>
-                        <div className="space-y-2 flex-1">
-                          <h3 className="font-semibold text-foreground">Mark as Urgent Sale</h3>
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            Get your item seen first! Urgent listings appear at the top of search results and get a
-                            special badge.
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              id="urgent"
-                              checked={isUrgent}
-                              onChange={(e) => setIsUrgent(e.target.checked)}
-                              className="h-4 w-4 rounded border-border"
-                            />
-                            <Label htmlFor="urgent" className="font-normal cursor-pointer text-sm">
-                              Mark as urgent (₹249 for 7 days)
-                            </Label>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-
-                    <div className="flex gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="flex-1 bg-transparent"
-                        onClick={() => router.back()}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                        {isSubmitting ? "Publishing..." : "Publish Item"}
-                      </Button>
-                    </div>
-                  </form>
-                </Card>
-              </>
-            )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.push("/browse")}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </Card>
           </div>
         </div>
       </div>

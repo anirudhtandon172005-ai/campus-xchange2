@@ -1,21 +1,23 @@
 "use client"
 
 import type React from "react"
-
 import Image from "next/image"
 import { Clock, MessageCircle, Heart, ShoppingCart } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
+import { addToWishlist, removeFromWishlist, checkWishlistStatus } from "@/app/actions/wishlist"
 import {
-  addToCart,
-  addToWishlist,
-  isInCart,
-  isInWishlist,
-  removeFromCart,
-  removeFromWishlist,
-} from "@/lib/cart-wishlist"
+  addToCart as addToCartAction,
+  removeFromCart as removeFromCartAction,
+  checkCartStatus,
+} from "@/app/actions/cart"
+
+/**
+ * UUID v4 regex (Supabase compatible)
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export interface Item {
   id: string
@@ -24,10 +26,12 @@ export interface Item {
   type: "sell" | "borrow" | "recycle"
   category: string
   image: string
-  sellerId: string // UUID from Supabase
-  seller: {
-    year: string
-    department: string
+  seller_id: string
+  seller?: {
+    id?: string
+    name?: string
+    year?: string
+    department?: string
   }
   isUrgent?: boolean
   negotiable?: boolean
@@ -42,34 +46,84 @@ interface ItemCardProps {
 export function ItemCard({ item, onClick, showActions = true }: ItemCardProps) {
   const [inCart, setInCart] = useState(false)
   const [inWishlist, setInWishlist] = useState(false)
+  const [loadingWishlist, setLoadingWishlist] = useState(false)
+  const [loadingCart, setLoadingCart] = useState(false)
+
+  const isValidUUID = UUID_REGEX.test(item.id)
 
   useEffect(() => {
-    setInCart(isInCart(item.id))
-    setInWishlist(isInWishlist(item.id))
-  }, [item.id])
-
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (inCart) {
-      removeFromCart(item.id)
-      setInCart(false)
-    } else {
-      addToCart(item)
-      setInCart(true)
+    if (!isValidUUID) {
+      console.warn("Skipping wishlist/cart check, invalid UUID:", item.id)
+      return
     }
-    window.dispatchEvent(new Event("cartUpdated"))
+
+    const checkStatus = async () => {
+      try {
+        const [wishlistStatus, cartStatus] = await Promise.all([checkWishlistStatus(item.id), checkCartStatus(item.id)])
+        setInWishlist(wishlistStatus)
+        setInCart(cartStatus)
+      } catch (err) {
+        console.error("Status check failed:", err)
+      }
+    }
+
+    checkStatus()
+  }, [item.id, isValidUUID])
+
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    if (!isValidUUID) {
+      console.error("Cannot add to cart - invalid UUID:", item.id)
+      return
+    }
+
+    setLoadingCart(true)
+
+    const previousState = inCart
+    setInCart(!previousState) // optimistic update
+
+    try {
+      const result = previousState ? await removeFromCartAction(item.id) : await addToCartAction(item.id)
+
+      if (!result?.success) {
+        setInCart(previousState)
+        console.error(result?.error || "Cart operation failed")
+      }
+    } catch (error) {
+      setInCart(previousState)
+      console.error("Cart error:", error)
+    } finally {
+      setLoadingCart(false)
+    }
   }
 
-  const handleAddToWishlist = (e: React.MouseEvent) => {
+  const handleAddToWishlist = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (inWishlist) {
-      removeFromWishlist(item.id)
-      setInWishlist(false)
-    } else {
-      addToWishlist(item)
-      setInWishlist(true)
+
+    if (!isValidUUID) {
+      console.error("Cannot wishlist item with invalid UUID:", item.id)
+      return
     }
-    window.dispatchEvent(new Event("wishlistUpdated"))
+
+    setLoadingWishlist(true)
+
+    const previousState = inWishlist
+    setInWishlist(!previousState) // optimistic update
+
+    try {
+      const result = previousState ? await removeFromWishlist(item.id) : await addToWishlist(item.id)
+
+      if (!result?.success) {
+        setInWishlist(previousState)
+        console.error(result?.error || "Wishlist operation failed")
+      }
+    } catch (error) {
+      setInWishlist(previousState)
+      console.error("Wishlist error:", error)
+    } finally {
+      setLoadingWishlist(false)
+    }
   }
 
   return (
@@ -91,6 +145,7 @@ export function ItemCard({ item, onClick, showActions = true }: ItemCardProps) {
           <Button
             size="icon"
             variant="secondary"
+            disabled={loadingWishlist || !isValidUUID}
             className={`h-8 w-8 rounded-full shadow-lg transition-colors ${
               inWishlist ? "bg-accent text-accent-foreground" : "bg-card/80 backdrop-blur-sm"
             }`}
@@ -98,10 +153,12 @@ export function ItemCard({ item, onClick, showActions = true }: ItemCardProps) {
           >
             <Heart className={`h-4 w-4 ${inWishlist ? "fill-current" : ""}`} />
           </Button>
+
           {item.type === "sell" && (
             <Button
               size="icon"
               variant="secondary"
+              disabled={loadingCart || !isValidUUID}
               className={`h-8 w-8 rounded-full shadow-lg transition-colors ${
                 inCart ? "bg-primary text-primary-foreground" : "bg-card/80 backdrop-blur-sm"
               }`}
@@ -126,11 +183,11 @@ export function ItemCard({ item, onClick, showActions = true }: ItemCardProps) {
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold text-foreground text-base leading-tight line-clamp-2">{item.title}</h3>
           {item.type === "borrow" ? (
-            <Badge variant="secondary" className="shrink-0 bg-accent/10 text-accent">
+            <Badge variant="secondary" className="bg-accent/10 text-accent">
               Borrow
             </Badge>
           ) : item.type === "recycle" ? (
-            <Badge variant="secondary" className="shrink-0 bg-accent text-accent-foreground">
+            <Badge variant="secondary" className="bg-accent text-accent-foreground">
               Free
             </Badge>
           ) : null}
@@ -145,9 +202,9 @@ export function ItemCard({ item, onClick, showActions = true }: ItemCardProps) {
 
         <div className="flex items-center justify-between pt-2">
           <div className="text-xs text-muted-foreground">
-            <span className="font-medium">{item.seller.year}</span>
+            <span className="font-medium">{item.seller?.year || "Student"}</span>
             {" • "}
-            <span>{item.seller.department}</span>
+            <span>{item.seller?.department || "Campus"}</span>
           </div>
           <MessageCircle className="h-4 w-4 text-muted-foreground" />
         </div>
