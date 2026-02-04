@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, CheckCircle2, Phone } from "lucide-react"
-import { saveContactRequest, getCurrentUserId } from "@/lib/requests"
+import { createContactRequest } from "@/app/actions/contact"
 
 interface ContactRequestModalProps {
   isOpen: boolean
@@ -60,39 +60,19 @@ export function ContactRequestModal({
     return isValid
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!validateForm()) {
       return
     }
 
     setStatus("sending")
-    const userData = localStorage.getItem("campusxchange_user")
-    const user = userData ? JSON.parse(userData) : { name: "Anonymous User", email: "user@university.edu" }
 
-    if (!user.email || user.email.trim() === "" || user.email === "null") {
-      alert("Please update your profile with a valid email address before sending a request.")
-      setStatus("idle")
-      return
-    }
+    // Append phone number to message since database schema is fixed
+    const finalMessage = `Phone: ${phoneNumber}\n\n${message}`
 
-    const userId = getCurrentUserId()
+    const result = await createContactRequest(itemId, sellerId, finalMessage)
 
-    saveContactRequest({
-      itemId,
-      itemTitle,
-      itemPrice,
-      itemImage,
-      sellerId,
-      sellerName,
-      buyerId: userId,
-      buyerName: user.name,
-      buyerEmail: user.email,
-      buyerPhone: phoneNumber,
-      message,
-    })
-
-    // Simulate sending
-    setTimeout(() => {
+    if (result.success) {
       setStatus("sent")
       setTimeout(() => {
         onClose()
@@ -101,7 +81,10 @@ export function ContactRequestModal({
         setMessage(`Hi! I'm interested in "${itemTitle}". Is it still available?`)
         setErrors({ phone: "", message: "" })
       }, 2000)
-    }, 1000)
+    } else {
+      setStatus("idle")
+      alert(result.error || "Failed to send request. Please try again.")
+    }
   }
 
   return (

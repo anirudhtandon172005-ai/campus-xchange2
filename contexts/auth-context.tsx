@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabaseClient"
 import type { User } from "@supabase/supabase-js"
 import { signOut as signOutAction } from "@/app/actions/auth"
 
@@ -16,7 +16,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     // Get initial session
@@ -41,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase])
+  }, [])
 
   const handleSignOut = async () => {
     await signOutAction()

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Navigation } from "@/components/navigation"
 import type { Item } from "@/components/item-card"
 import { Button } from "@/components/ui/button"
-import { getCartItems, removeFromCart } from "@/lib/cart-wishlist"
+import { getCartItems, removeFromCart } from "@/app/actions/cart"
 import { ShoppingCart, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -12,28 +12,48 @@ import { ProtectedRoute } from "@/components/protected-route"
 
 export default function CartPage() {
   const [cartItems, setCartItems] = useState<Item[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
+  const fetchCart = async () => {
+    setIsLoading(true)
+    try {
+      const data = await getCartItems()
+
+      // Normalize the data structure
+      const normalized: Item[] = data.map((entry: any) => {
+        const itemData = entry.items
+        return {
+          ...itemData,
+          id: itemData.id,
+          seller_id: itemData.seller_id,
+          image: itemData.image_url || itemData.image || "/placeholder.svg",
+          seller: {
+            year: itemData.profiles?.year || "Unknown",
+            department: itemData.profiles?.department || "Unknown",
+          },
+        }
+      })
+
+      setCartItems(normalized)
+    } catch (error) {
+      console.error("Failed to fetch cart:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   useEffect(() => {
-    setCartItems(getCartItems())
-
-    const handleUpdate = () => {
-      setCartItems(getCartItems())
-    }
-
-    window.addEventListener("cartUpdated", handleUpdate)
-    window.addEventListener("storage", handleUpdate)
-
-    return () => {
-      window.removeEventListener("cartUpdated", handleUpdate)
-      window.removeEventListener("storage", handleUpdate)
-    }
+    fetchCart()
   }, [])
 
-  const handleRemove = (itemId: string) => {
-    removeFromCart(itemId)
-    setCartItems(getCartItems())
-    window.dispatchEvent(new Event("cartUpdated"))
+  const handleRemove = async (itemId: string) => {
+    const result = await removeFromCart(itemId)
+    if (result.success) {
+      await fetchCart() // Refresh cart
+    } else {
+      console.error("Failed to remove item:", result.error)
+    }
   }
 
   const totalPrice = cartItems.reduce((sum, item) => sum + (item.price || 0), 0)
@@ -69,7 +89,7 @@ export default function CartPage() {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-foreground mb-1 line-clamp-1">{item.title}</h3>
                       <p className="text-sm text-muted-foreground mb-2">
-                        {item.seller.year} • {item.seller.department}
+                        {item.seller?.year || "Student"} • {item.seller?.department || "Campus"}
                       </p>
                       <p className="text-lg font-bold text-primary">₹{item.price}</p>
                     </div>

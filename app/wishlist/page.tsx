@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { Navigation } from "@/components/navigation"
 import { ItemCard, type Item } from "@/components/item-card"
 import { Button } from "@/components/ui/button"
-import { getWishlistItems } from "@/lib/cart-wishlist"
+import { getWishlist } from "@/app/actions/wishlist"
 import { ContactRequestModal } from "@/components/contact-request-modal"
-import { Heart } from "lucide-react"
+import { Heart, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { ProtectedRoute } from "@/components/protected-route"
 
@@ -14,21 +14,40 @@ export default function WishlistPage() {
   const [wishlistItems, setWishlistItems] = useState<Item[]>([])
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
   const [showContactModal, setShowContactModal] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    setWishlistItems(getWishlistItems())
+    const fetchWishlist = async () => {
+      try {
+        const data = await getWishlist()
 
-    const handleUpdate = () => {
-      setWishlistItems(getWishlistItems())
+        // Map Supabase response to Item interface
+        // The join returns: { item_id, items: { ...itemData, profiles: { ...sellerData } } }
+        const mappedItems = data.map((entry: any) => {
+          const itemData = entry.items
+          return {
+            ...itemData,
+            id: itemData.id, // Explicit mapping if needed
+            seller_id: itemData.seller_id,
+            sellerId: itemData.seller_id, // Compatibility
+            seller: {
+              year: itemData.profiles?.year || "Unknown",
+              department: itemData.profiles?.department || "Unknown",
+            },
+            // Fallback for imageURL/image field naming if database differs from mock
+            image: itemData.image || itemData.image_url || "/placeholder.svg",
+          }
+        }) as Item[]
+
+        setWishlistItems(mappedItems)
+      } catch (error) {
+        console.error("Failed to fetch wishlist:", error)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    window.addEventListener("wishlistUpdated", handleUpdate)
-    window.addEventListener("storage", handleUpdate)
-
-    return () => {
-      window.removeEventListener("wishlistUpdated", handleUpdate)
-      window.removeEventListener("storage", handleUpdate)
-    }
+    fetchWishlist()
   }, [])
 
   const handleItemClick = (item: Item) => {
@@ -48,7 +67,11 @@ export default function WishlistPage() {
             </p>
           </div>
 
-          {wishlistItems.length > 0 ? (
+          {isLoading ? (
+            <div className="flex h-64 items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : wishlistItems.length > 0 ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {wishlistItems.map((item) => (
                 <ItemCard key={item.id} item={item} onClick={() => handleItemClick(item)} />
@@ -73,6 +96,11 @@ export default function WishlistPage() {
             isOpen={showContactModal}
             onClose={() => setShowContactModal(false)}
             itemTitle={selectedItem.title}
+            itemId={selectedItem.id}
+            itemPrice={selectedItem.price}
+            itemImage={selectedItem.image}
+            sellerId={selectedItem.seller_id}
+            sellerName={selectedItem.seller?.department || "Seller"} // Use department as proxy name or fix safely
           />
         )}
       </div>

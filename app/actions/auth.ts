@@ -7,8 +7,10 @@ import { createClient } from "@/lib/supabase/server"
 // Only allow JIIT student emails
 const EMAIL_REGEX = /^\d{12}@mail\.jiit\.ac\.in$/
 
+/* -----------------------------------------
+   SIGN UP
+----------------------------------------- */
 export async function signUp(email: string, password: string) {
-  // 1. Validate email
   if (!EMAIL_REGEX.test(email)) {
     return {
       error: "Email must be 12 digits followed by @mail.jiit.ac.in",
@@ -17,7 +19,6 @@ export async function signUp(email: string, password: string) {
 
   const supabase = await createClient()
 
-  // 2. Create auth user
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -32,14 +33,13 @@ export async function signUp(email: string, password: string) {
   }
 
   const user = data.user
-
   if (!user) {
     return { error: "User creation failed" }
   }
 
-  // 3. Create profile row (CRITICAL for RLS)
+  // Create profile row
   const { error: profileError } = await supabase.from("profiles").insert({
-    id: user.id, // must match auth.users.id
+    id: user.id,
     college: "JIIT",
   })
 
@@ -51,6 +51,9 @@ export async function signUp(email: string, password: string) {
   return { success: true }
 }
 
+/* -----------------------------------------
+   SIGN IN
+----------------------------------------- */
 export async function signIn(email: string, password: string) {
   const supabase = await createClient()
 
@@ -67,15 +70,24 @@ export async function signIn(email: string, password: string) {
   redirect("/browse")
 }
 
+/* -----------------------------------------
+   SIGN OUT
+----------------------------------------- */
 export async function signOut() {
   const supabase = await createClient()
+
   await supabase.auth.signOut()
+
   revalidatePath("/", "layout")
   redirect("/login")
 }
 
+/* -----------------------------------------
+   GET CURRENT USER (SERVER)
+----------------------------------------- */
 export async function getCurrentUser() {
   const supabase = await createClient()
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
